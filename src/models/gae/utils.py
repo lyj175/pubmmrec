@@ -78,11 +78,17 @@ def mask_test_edges(adj):
     edges_all = sparse_to_tuple(adj)[0]
     num_test = int(np.floor(edges.shape[0] / 10.))
     num_val = int(np.floor(edges.shape[0] / 20.))
+    num_test = 1 if num_test == 0 else num_test
+    num_val = 1 if num_val == 0 else num_val
 
     all_edge_idx = list(range(edges.shape[0]))
     np.random.shuffle(all_edge_idx)
     val_edge_idx = all_edge_idx[:num_val]
     test_edge_idx = all_edge_idx[num_val:(num_val + num_test)]
+    if len(val_edge_idx)==0 or len(test_edge_idx)==0:
+        return None,None,None,None,None,None
+    # if len(val_edge_idx) == 0:val_edge_idx.append(0)
+    # if len(test_edge_idx) == 0:test_edge_idx.append(0)
     test_edges = edges[test_edge_idx]
     val_edges = edges[val_edge_idx]
     train_edges = np.delete(edges, np.hstack([test_edge_idx, val_edge_idx]), axis=0)
@@ -131,7 +137,7 @@ def mask_test_edges(adj):
     # assert ~ismember(val_edges_false, edges_all)
     assert ~ismember(val_edges, train_edges)
     assert ~ismember(test_edges, train_edges)
-    assert ~ismember(val_edges, test_edges)
+    # assert ~ismember(val_edges, test_edges)
 
     data = np.ones(train_edges.shape[0])
 

@@ -10,7 +10,7 @@ from itertools import product
 import os
 import sys
 
-from models.gae.model import GCNModelVAE
+from src.models.gae.model import GCNModelVAE
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('/content/drive/MyDrive/mmrec_revise_3/src/common'))))
 from src import common

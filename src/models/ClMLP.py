@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from models.vgae import VGAE
+from src.models.vgae import VGAE
 from src.models.gae import model as gae_model
 from src.models.gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
 import scipy.sparse as sp
@@ -13,6 +13,7 @@ import numpy as np
 import torch.nn.functional as F
 from src.models.gae.model import GCNModelVAE
 from queue import Queue
+from sklearn.metrics.pairwise import cosine_similarity
 
 class ClEncoder(nn.Module):
     def __init__(self, feature:torch.Tensor,device,dim_latent,node_interaction_dict,num_user,num_item):
@@ -24,8 +25,10 @@ class ClEncoder(nn.Module):
         self.relu = nn.ReLU()
         self.num_user = num_user
         self.num_item = num_item
+        self.dim_latent = dim_latent
         # self.fc2 = nn.Linear(feature.shape[1], feature.shape[1]).to(device)
         self.fc2 = nn.Linear(dim_latent*4, dim_latent).to(device)
+        self.fc3 = nn.Linear(dim_latent, dim_latent).to(device)
         self.vgae = VGAE(self.num_user, self.num_item, self.node_interaction_dict, feature,dim_latent)
 
         self.device = device
@@ -41,31 +44,71 @@ class ClEncoder(nn.Module):
         x_1 = self.fc1(feature)
         x_1 = self.relu(x_1)
         x_1 = self.fc2(x_1)
+        x_1 = self.relu(x_1)
+        # 加入初始化的user数据
+        feature_users = nn.Parameter(nn.init.xavier_normal_(torch.tensor(
+            np.random.randn(self.num_user, self.dim_latent), dtype=torch.float32, requires_grad=True)))
+        # feature_users = feature_users.to(self.device)
+        x_1 = torch.cat((feature_users, x_1), dim=0).to(self.device)
+        x_1 = self.fc3(x_1)
 
         self.vgae.set_fea(x_1)
         # TODO VGAE and Contrastive Learning 4 随机抽取子图并由VGAE生成对应增强子图
-        results,vgae_loss = self.vgae.simulate(2)
+        results,vgae_loss = self.vgae.simulate(90)
+        # cl_loss = 0
         cl_loss = self.info_nce_loss(results)
         # self.optimizer.zero_grad()
         # cl_loss.backward(retain_graph=True) #TODO 即时
         # self.optimizer.step()
-        if cl_loss > 1e6 or cl_loss < -1e6:
-            print("Tensor may be exploding!")
-            cl_loss = 0
+        # if cl_loss > 1e6 or cl_loss < -1e6:
+        #     print("Tensor may be exploding!")
+        #     cl_loss = 0
         print('对比损失',cl_loss)
         # return x,cl_loss
         # TODO VGAE and Contrastive Learning 5 返回经过对比学习优化后的输出x_1与对比损失
         return x_1,cl_loss,vgae_loss
 
-    def info_nce_loss(self,data,temperature=0.5):
-        ori_,gen_ = data[0],data[1]
-        positive_score = torch.tensor(0.0)
-        negative_score = torch.tensor(0.0)
-        for i in range(0,len(ori_)):
-            #正例对
-            positive_score += torch.cosine_similarity(ori_[i],gen_[i],dim=1).sum()
-            negative_score += self.all_neg_score(i,data)
-        return -torch.log((torch.exp(positive_score / temperature) / negative_score/temperature)).mean()
+    def info_nce_loss(self,data,temperature=100):
+        pos = torch.tensor(0.0)
+        neg = torch.tensor(0.0)
+        for i in range(0, len(data[0])):
+            # print(i)
+            # pos = pos + torch.log(torch.sum(torch.mm(data[0][i], data[0][i].T)))
+            # pos = pos + torch.log(torch.sum(torch.mm(data[0][i], data[1][i].T))) #enhanced
+
+            pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[0][i].detach().numpy()))
+            pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[1][i].detach().numpy()))
+
+            # pos += sum(torch.mm(data[0][i], data[0][i].T))
+            # pos += sum(torch.mm(data[0][i], data[1][i].T))
+            for j in range(0, len(data[0])):
+                if j == i: continue
+                # neg += torch.log(torch.sum(torch.mm(data[0][i], data[0][j].T)))
+                # neg += torch.log(torch.sum(torch.mm(data[0][i], data[1][j].T)))
+
+                neg = neg + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[0][j].detach().numpy()))
+                neg = neg + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[1][j].detach().numpy()))
+        # pos = pos / temperature
+        # neg = neg / temperature
+        # loss = -torch.log(torch.exp(pos) / (torch.exp(pos) + torch.exp(neg)))
+        # loss = -torch.log(torch.exp(pos) / (torch.exp(pos) + torch.exp(neg)))
+        # return torch.mean(loss)
+        print('-----正例分数',pos,'-----反例分数',neg)
+        return neg/pos
+
+        # data[0]原始图的集合,data[1]生成图的数量
+        # ori_,gen_ = data[0],data[1]
+        # a = torch.mm(data[0][0], data[0][0].t())
+        # # import pdb
+        # # pdb.set_trace()
+        # positive_score = torch.tensor(0.0)
+        # negative_score = torch.tensor(0.0)
+        # for i in range(0,len(ori_)):
+        #     #正例对
+        #     positive_score += torch.cosine_similarity(ori_[i],gen_[i],dim=1).sum()
+        #     negative_score += self.all_neg_score(i,data)
+        # return -torch.log((torch.exp(positive_score / temperature) / negative_score/temperature)).mean()
+        # return 0
 
 
     def all_neg_score(self,target_index,data):
@@ -84,13 +127,14 @@ class ClEncoder(nn.Module):
         # features.save()
         # TODO VGAE and Contrastive Learning 2 用户偏好向量生成
         # TODO 样本特征从item扩展到user,由于一开始没有用户特征（即用户偏好表示），所以随机初始化
-        feature_users = nn.Parameter(nn.init.xavier_normal_(torch.tensor(
-            np.random.randn(self.num_user, features.shape[1]), dtype=torch.float32, requires_grad=True)))
-        # feature_users, features = feature_users.to(self.device), features.to(self.device)
-        # TODO 将随机的用户特征和物品的特征进行拼接，得到数据集矩阵，0-num_user个向量是用户向量，剩下的是物品信息向量
-        features_new = torch.cat((feature_users, features), dim=0).to(self.device)
+        # feature_users = nn.Parameter(nn.init.xavier_normal_(torch.tensor(
+        #     np.random.randn(self.num_user, features.shape[1]), dtype=torch.float32, requires_grad=True)))
+        # # feature_users, features = feature_users.to(self.device), features.to(self.device)
+        # # TODO 将随机的用户特征和物品的特征进行拼接，得到数据集矩阵，0-num_user个向量是用户向量，剩下的是物品信息向量
+        # features_new = torch.cat((feature_users, features), dim=0).to(self.device)
 
-        return self.forward(features_new)
+        # return self.forward(features_new)
+        return self.forward(features)
 
     def iter_node(self,root_index,until):
         node_queue = Queue()

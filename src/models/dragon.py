@@ -13,14 +13,15 @@ import torch.nn.functional as F
 from torch import optim
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import remove_self_loops, degree
-
-from models.gae import train
-
+from src.models.metadata_split import *
+from src.models.channel_attention_fusion import *
+from src.models.gae import train
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('/content/drive/MyDrive/mmrec_revise_3/src/common'))))
 from src.common.abstract_recommender import GeneralRecommender
 from src.models import ClMLP
 from scipy.sparse import coo_matrix
 from src.models.vgae import VGAE
+
 class DRAGON(GeneralRecommender):
     def __init__(self, config, dataset):
         super(DRAGON, self).__init__(config, dataset)
@@ -46,6 +47,7 @@ class DRAGON(GeneralRecommender):
         self.dataset = dataset
         # self.construction = 'weighted_max'
         self.construction = 'cat'
+        # self.construction = 'channel'
         self.reg_weight = config['reg_weight']
         self.drop_rate = 0.1
         self.v_rep = None
@@ -57,6 +59,10 @@ class DRAGON(GeneralRecommender):
         self.MLP_v = nn.Linear(self.dim_latent, self.dim_latent, bias=False)
         self.MLP_t = nn.Linear(self.dim_latent, self.dim_latent, bias=False)
         self.mm_adj = None
+        self.metadata_num = 10
+        self.fusion_model = ChannelAttention(self.metadata_num)
+        self.rep_for_fusion = None
+        self.split_scale_index = None
         # self.clEncoder = ClMLP.ClEncoder(dim_x,dim_x,dim_x,self.device)
 
 
@@ -269,6 +275,7 @@ class DRAGON(GeneralRecommender):
             # self.a,b = self.clVencoder.item_modal_forward(self.v_feat,adj,self.num_user,self.device)
             # self.v_rep, self.v_preference = self.v_gcn(self.edge_index_dropv, self.edge_index, self.v_feat)
             print("-----vgae_loss_v-------"+str(self.vgae_loss_v))
+            #卷积传播
             self.v_rep, self.v_preference = self.v_gcn(self.edge_index_dropv, self.edge_index, self.v_feat_) #TODO 开启VGAE时
             representation = self.v_rep
         if self.t_feat is not None:
@@ -277,10 +284,10 @@ class DRAGON(GeneralRecommender):
             # self.clTencoder.train()wake
             # self.gae_t_optimizer.zero_grad()
             # self.t_feat_, gae_loss_t = self.clTencoder.item_modal_forward(self.t_feat, adj,self.num_user,self.device)
-            print('-----------开始VGAE-CL编码-文本模态------------')
+            # print('-----------开始VGAE-CL编码-文本模态------------')
             self.t_feat_, self.cl_loss_t,self.vgae_loss_t = self.clTencoder.item_modal_forward(self.t_feat)
-            print('-----------结束VGAE-CL编码-文本模态------------')
-            print("-----vgae_loss_t-------" + str(self.vgae_loss_t))
+            # print('-----------结束VGAE-CL编码-文本模态------------')
+            # print("-----vgae_loss_t-------" + str(self.vgae_loss_t))
             # gae_loss_t.backward()
             # self.gae_t_optimizer.step()
 
@@ -290,10 +297,30 @@ class DRAGON(GeneralRecommender):
             if representation is None:
                 representation = self.t_rep
             else:#TODO 模态融合1：先拼接所有节点的两个模态表示
+                # if self.construction == 'cat':
+                #     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
+                # else:
+                #     representation += self.t_rep
+                #TODO channel fusion
+                if self.rep_for_fusion == None or self.split_scale_index == None:
+                    self.rep_for_fusion,self.split_scale_index = metadata_split(self.metadata_num,self.v_rep)
+                weight_fea = self.fusion_model(self.rep_for_fusion)
+                weight_fea = weight_fea.squeeze()
+                weight_fea = weight_fea.detach().numpy()
+                for i in range(0,len(self.v_rep)):
+                    split_fea_for_m_v = np.array_split(self.v_rep[i].detach().numpy(), self.split_scale_index[i])
+                    m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
+                    self.v_rep[i] = m_result_v
+
+                    split_fea_for_m_t = np.array_split(self.t_rep[i].detach().numpy(), self.split_scale_index[i])
+                    m_result_t = torch.cat(
+                        [torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
+                    self.t_rep[i] = m_result_t
                 if self.construction == 'cat':
                     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 else:
                     representation += self.t_rep
+
         # TODO 模态融合2：选择具体融合方式
         if self.construction == 'weighted_sum':
             if self.v_rep is not None:
@@ -330,6 +357,7 @@ class DRAGON(GeneralRecommender):
                 user_rep = self.weight_u.transpose(1, 2) * user_rep
 
                 user_rep = torch.cat((user_rep[:, :, 0], user_rep[:, :, 1]), dim=1)
+
 
         item_rep = representation[self.num_user:]
         #TODO 物品多模态信息融合
@@ -368,7 +396,7 @@ class DRAGON(GeneralRecommender):
         return torch.mean(cl_loss)
 
     #TODO 每个批次训练时计算损失
-    def calculate_loss(self, interaction):
+    def  calculate_loss(self, interaction):
         user = interaction[0]
         pos_scores, neg_scores = self.forward(interaction)#TODO 前向传播
         loss_value = -torch.mean(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
@@ -387,7 +415,7 @@ class DRAGON(GeneralRecommender):
         # cl_loss = self.InfoNCE(self.v_preference,self.t_preference,1)
 
         # return loss_value + reg_loss
-        loss_count = loss_value + reg_loss
+        loss_count = loss_value + reg_loss + self.cl_loss_v
         # loss_count = loss_value + reg_loss + self.cl_loss_v + self.cl_loss_t + self.vgae_loss_t + self.vgae_loss_v
         print(f'总损失{loss_count}')
         #TODO 最终的损失：基础top-k排序损失+正则损失+对比损失

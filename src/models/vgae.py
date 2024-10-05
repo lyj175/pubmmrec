@@ -8,8 +8,8 @@ import torch
 from scipy.sparse import coo_matrix
 from torch import nn, optim
 
-from models.gae.optimizer import loss_function
-from models.gae.utils import mask_test_edges, preprocess_graph, get_roc_score
+from src.models.gae.optimizer import loss_function
+from src.models.gae.utils import mask_test_edges, preprocess_graph, get_roc_score
 from src.models.gae.model import GCNModelVAE
 import scipy.sparse as sp
 
@@ -46,7 +46,7 @@ class VGAE():
         for i in range(0, len(data)):
             index_query_feature_id[i] = data[i]
             feature_id_query_index[data[i]] = i
-            features.append(ori_feature[i].clone())
+            features.append(ori_feature[data[i]].clone())
         return index_query_feature_id, feature_id_query_index, features
 
     def iter_node(self,root_index, until, node_interaction_dict):
@@ -55,15 +55,15 @@ class VGAE():
         rows, cols, keys = [], [], []
         while node_queue.qsize() > 0:
             cur = node_queue.get()
-            children = node_interaction_dict[cur].tolist()[:10]  # TODO 只取前十个交互结点
+            children = node_interaction_dict[cur].tolist()[:8]  # TODO 只取前十个交互结点
             rows += [cur] * len(children)
             cols += children
             keys = list(keys)
             keys += [cur] * len(children)
             keys += children
             keys = set(keys)
-
-            if len(keys) >= until: return rows, cols, keys
+            # print(b,'-----------',cur,'----------------',len(rows),'----',len(cols),'-------',len(keys),'------------',until)
+            if len(cols) >= until: return rows, cols, keys
             for i in children:
                 node_queue.put(i)
 
@@ -83,12 +83,13 @@ class VGAE():
         # # feature_users, features = feature_users.to(self.device), features.to(self.device)
         # features_new = torch.cat((feature_users, features), dim=0)
         #all_count记录样本索引，不重复
-        subgraph_data_row, subgraph_data_col, all_count = self.iter_node(root, 1000, node_interaction_dict)
+        #TODO 图结点数最大值，在第一次迭代后开始判断
+        subgraph_data_row, subgraph_data_col, all_count = self.iter_node(root, 1, node_interaction_dict)
         # subgraph_data_row,subgraph_data_col,all_count = iter_node(root,1000,node_interaction_dict)
 
         index_query_feature_id, feature_id_query_index, features_subgraph = self.id_map(all_count, features)
         features_subgraph = torch.stack(features_subgraph)
-        print(f'去重前{len(subgraph_data_row)}去重后{len(set(all_count))}')
+        # print(f'去重前{len(subgraph_data_row)}去重后{len(set(all_count))}')
 
         subgraph_data_row, subgraph_data_col = self.get_norm_index(subgraph_data_row, subgraph_data_col,
                                                               feature_id_query_index)
@@ -111,11 +112,11 @@ class VGAE():
         while len(n_index)<n:
             index = int(random.random()*(self.num_user+self.num_item))
             if index not in n_index: n_index.append(index)
-        print('n个样本的索引',n_index)
+        # print('n个样本的索引',n_index)
         results = [[],[]]#TODO 存放原始图0索引与vgae生成图
 
         for i in n_index:#TODO 对随机抽取的中心节点开始往外扩张，得到抽取的子图
-            features, adj = self.item_modal_forward(self.fea, self.num_user, self.node_dict,0)
+            features, adj = self.item_modal_forward(self.fea, self.num_user, self.node_dict,i)
             # features, adj = item_modal_forward(fea, num_user, node_dict, 20000)
             n_nodes = features.shape[0]
 
@@ -125,6 +126,8 @@ class VGAE():
             adj_orig.eliminate_zeros()
 
             adj_train, train_edges, val_edges, val_edges_false, test_edges, test_edges_false = mask_test_edges(adj)
+            if adj_train == None:
+                continue
             adj = adj_train
 
             # Some preprocessing
@@ -133,6 +136,7 @@ class VGAE():
             # adj_label = sparse_to_tuple(adj_label)
             adj_label = torch.FloatTensor(adj_label.toarray())
 
+            if adj.sum()==0:continue;
             pos_weight = float(adj.shape[0] * adj.shape[0] - adj.sum()) / adj.sum()
             norm = adj.shape[0] * adj.shape[0] / float((adj.shape[0] * adj.shape[0] - adj.sum()) * 2)
 
@@ -148,21 +152,21 @@ class VGAE():
             # cur_loss = loss.item()
             # self.optimizer.step()
 
-            hidden_emb = mu.data.numpy()
-            roc_curr, ap_curr = get_roc_score(hidden_emb, adj_orig, val_edges, val_edges_false)
+            # hidden_emb = mu.data.numpy()
+            # roc_curr, ap_curr = get_roc_score(hidden_emb, adj_orig, val_edges, val_edges_false)
 
-            print("VGAE----样本:", '%04d' % (i), "train_loss=",
-                  "共%04d"%len(n_index),
-                  "{:.5f}".format(loss),
-                  "val_ap=", "{:.5f}".format(ap_curr),
-                  "time=", "{:.5f}".format(time.time() - t))
+            # print("VGAE----样本:", '%04d' % (i), "train_loss=",
+            #       "共%04d"%len(n_index),
+            #       "{:.5f}".format(loss),
+            #       "val_ap=", "{:.5f}".format(ap_curr),
+            #       "time=", "{:.5f}".format(time.time() - t))
             # print("train_loss=", "{:.5f}".format(cur_loss),
             #       "val_ap=", "{:.5f}".format(ap_curr),
             #       "time=", "{:.5f}".format(time.time() - t)
             #       )
 
-            roc_score, ap_score = get_roc_score(hidden_emb, adj_orig, test_edges, test_edges_false)
-            print('Test ROC score: ' + str(roc_score))
-            print('Test AP score: ' + str(ap_score))
+            # roc_score, ap_score = get_roc_score(hidden_emb, adj_orig, test_edges, test_edges_false)
+            # print('Test ROC score: ' + str(roc_score))
+            # print('Test AP score: ' + str(ap_score))
         # return results,cur_loss
         return results,loss

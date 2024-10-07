@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from time import time
 from torch import optim
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import remove_self_loops, degree
@@ -259,6 +260,8 @@ class DRAGON(GeneralRecommender):
         representation = None
         adj = self.dataset.get_adj_matrix()
         # print('图像模态',self.v_feat.shape,'文本模态',self.t_feat.shape)
+        start_cl = time()
+        print('start cl---')
         if self.v_feat is not None:
             #TODO 输入交互边与图像模态，聚合传播存在交互的节点，v_rep：所有节点的图像表征（其中顺序为0-user_num为用户节点，往后为item节点），
             # v_preference：所有用户的图像特征偏好,self.v_rep 的维度通常是 (num_user + num_item, embedding_size)，其中 embedding_size 是特征的维度。
@@ -302,6 +305,9 @@ class DRAGON(GeneralRecommender):
                 #     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 # else:
                 #     representation += self.t_rep
+                print(f'finish cl---{time()-start_cl}')
+                start = time()
+                print('---------start fusion')
                 #TODO channel fusion
                 if self.rep_for_fusion == None or self.split_scale_index == None:
                     self.rep_for_fusion,self.split_scale_index = metadata_split(self.metadata_num,self.v_rep)
@@ -321,6 +327,7 @@ class DRAGON(GeneralRecommender):
                     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 else:
                     representation += self.t_rep
+                print(f'finish fusion---{time() - start}')
 
         # TODO 模态融合2：选择具体融合方式
         if self.construction == 'weighted_sum':

@@ -15,7 +15,8 @@ def metadata_split(split_num,features):
     s = s*len(features[0])
     meta_data_len = int(np.max(s))
 
-    temp_fea = features.clone().detach()
+    # temp_fea = features.clone().detach()
+    temp_fea = features
     # 供通道注意力计算的张量（样本数，metadata数量，metadata高，metadata宽）
     v_for_channel = torch.zeros(len(temp_fea), split_num, 1, meta_data_len)
     all_of_index = []#记录每个样本的元数据分割索引
@@ -27,12 +28,10 @@ def metadata_split(split_num,features):
         index = index+int(s[0])
         indexes.append(index)
         metadatas[0] = (join_tail(splitted_fea,meta_data_len))
-        # metadatas_unfilled[0] = (splitted_fea,meta_data_len)
         for i in range(1,split_num-1):
             splitted_fea = temp_fea[j][index:index + int(s[i])]
             index = index + int(s[i])
             indexes.append(index)
-            # metadatas[i] = (join_tail(temp_fea[j][int(s[i]):int(s[i+1])],meta_data_len))#一个metadata
             metadatas[i] = (join_tail(splitted_fea,meta_data_len))#一个metadata
         metadatas[split_num-1] = (join_tail(temp_fea[j][index:index + int(s[split_num-1])], meta_data_len))
         v_for_channel[j] = metadatas

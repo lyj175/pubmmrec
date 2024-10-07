@@ -3,15 +3,15 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.models.vgae import VGAE
-from src.models.gae import model as gae_model
-from src.models.gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
+from models.vgae import VGAE
+from models.gae import model as gae_model
+from models.gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
 import scipy.sparse as sp
-from src.models.gae.optimizer import loss_function
+from models.gae.optimizer import loss_function
 from scipy.sparse import csr_matrix, coo_matrix
 import numpy as np
 import torch.nn.functional as F
-from src.models.gae.model import GCNModelVAE
+from models.gae.model import GCNModelVAE
 from queue import Queue
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -49,7 +49,11 @@ class ClEncoder(nn.Module):
         feature_users = nn.Parameter(nn.init.xavier_normal_(torch.tensor(
             np.random.randn(self.num_user, self.dim_latent), dtype=torch.float32, requires_grad=True)))
         # feature_users = feature_users.to(self.device)
-        x_1 = torch.cat((feature_users, x_1), dim=0).to(self.device)
+        #print('----------------',self.device)
+        feature_users = feature_users.to(self.device)
+        x_1 = x_1.to(self.device)
+        x_1 = torch.cat((feature_users, x_1), dim=0)
+        # x_1 = torch.cat((feature_users, x_1), dim=0).to(self.device)
         x_1 = self.fc3(x_1)
 
         self.vgae.set_fea(x_1)
@@ -76,8 +80,11 @@ class ClEncoder(nn.Module):
             # pos = pos + torch.log(torch.sum(torch.mm(data[0][i], data[0][i].T)))
             # pos = pos + torch.log(torch.sum(torch.mm(data[0][i], data[1][i].T))) #enhanced
 
-            pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[0][i].detach().numpy()))
-            pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[1][i].detach().numpy()))
+            pos = pos + np.sum(cosine_similarity(data[0][i].cpu().detach().numpy(), data[0][i].cpu().detach().numpy()))
+            pos = pos + np.sum(cosine_similarity(data[0][i].cpu().detach().numpy(), data[1][i].cpu().detach().numpy()))
+
+            # pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[0][i].detach().numpy()))
+            # pos = pos + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[1][i].detach().numpy()))
 
             # pos += sum(torch.mm(data[0][i], data[0][i].T))
             # pos += sum(torch.mm(data[0][i], data[1][i].T))
@@ -86,8 +93,8 @@ class ClEncoder(nn.Module):
                 # neg += torch.log(torch.sum(torch.mm(data[0][i], data[0][j].T)))
                 # neg += torch.log(torch.sum(torch.mm(data[0][i], data[1][j].T)))
 
-                neg = neg + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[0][j].detach().numpy()))
-                neg = neg + np.sum(cosine_similarity(data[0][i].detach().numpy(), data[1][j].detach().numpy()))
+                neg = neg + np.sum(cosine_similarity(data[0][i].cpu().detach().numpy(), data[0][j].cpu().detach().numpy()))
+                neg = neg + np.sum(cosine_similarity(data[0][i].cpu().detach().numpy(), data[1][j].cpu().detach().numpy()))
         # pos = pos / temperature
         # neg = neg / temperature
         # loss = -torch.log(torch.exp(pos) / (torch.exp(pos) + torch.exp(neg)))

@@ -4,7 +4,12 @@ import torch.nn.functional as F
 
 
 def loss_function(preds, labels, mu, logvar, n_nodes, norm, pos_weight):
-    cost = norm * F.binary_cross_entropy_with_logits(preds, labels, pos_weight=torch.tensor(pos_weight))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    preds = preds.to(device)
+    labels = labels.to(device)
+    pos_weight = torch.tensor(pos_weight).to(device)
+    cost = norm * F.binary_cross_entropy_with_logits(preds, labels, pos_weight=pos_weight)
+    # cost = norm * F.binary_cross_entropy_with_logits(preds, labels, pos_weight=torch.tensor(pos_weight)).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014

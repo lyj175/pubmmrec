@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.models.gae.layers import GraphConvolution
+from models.gae.layers import GraphConvolution
 
 
 class GCNModelVAE(nn.Module):#TODO 输入样本与邻接矩阵，输出VAE编码的新邻接矩阵与均值方差矩阵

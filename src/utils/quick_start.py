@@ -9,17 +9,19 @@ from logging import getLogger
 from itertools import product
 import os
 import sys
+import csv
+from time import time
 
-from src.models.gae.model import GCNModelVAE
+from models.gae.model import GCNModelVAE
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath('/content/drive/MyDrive/mmrec_revise_3/src/common'))))
-from src import common
+import common
 
-from src.utils.dataset import RecDataset
-from src.utils.dataloader import TrainDataLoader, EvalDataLoader
-from src.utils.logger import init_logger
-from src.utils.configurator import Config
-from src.utils.utils import init_seed, get_model, get_trainer, dict2str
+from utils.dataset import RecDataset
+from utils.dataloader import TrainDataLoader, EvalDataLoader
+from utils.logger import init_logger
+from utils.configurator import Config
+from utils.utils import init_seed, get_model, get_trainer, dict2str
 import platform
 import os
 
@@ -67,40 +69,43 @@ def quick_start(model, dataset, config_dict, save_model=True):
     # combinations
     combinators = list(product(*hyper_ls))#TODO 生成超参数的所有排列组合，一个参数多个待选值，排列组合
     total_loops = len(combinators)
-    for hyper_tuple in combinators:
-        # random seed reset
-        for j, k in zip(config['hyper_parameters'], hyper_tuple):#TODO 同时迭代两个组，达到给键赋值的作用
-            config[j] = k
-        init_seed(config['seed'])#TODO 初始化随机种子并发给cuda
+    with open(f'score{time()}.csv', mode='w', newline='') as score_file:
+        score_writer = csv.writer(score_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        # score_writer.writerow(['name', 'department', 'birthday month'])
+        for hyper_tuple in combinators:
+            # random seed reset
+            for j, k in zip(config['hyper_parameters'], hyper_tuple):#TODO 同时迭代两个组，达到给键赋值的作用
+                config[j] = k
+            init_seed(config['seed'])#TODO 初始化随机种子并发给cuda
 
-        logger.info('========={}/{}: Parameters:{}={}======='.format(
-            idx+1, total_loops, config['hyper_parameters'], hyper_tuple))
+            logger.info('========={}/{}: Parameters:{}={}======='.format(
+                idx+1, total_loops, config['hyper_parameters'], hyper_tuple))
 
-        # set random state of dataloader
-        train_data.pretrain_setup()
-        # model loading and initialization
-        model = get_model(config['model'])(config, train_data).to(config['device'])#TODO 初始化模型并发送到计算单元
-        logger.info(model)
+            # set random state of dataloader
+            train_data.pretrain_setup()
+            # model loading and initialization
+            model = get_model(config['model'])(config, train_data).to(config['device'])#TODO 初始化模型并发送到计算单元
+            logger.info(model)
 
-        # trainer loading and initialization
-        trainer = get_trainer()(config, model)
-        # debug
-        # model training
-        best_valid_score, best_valid_result, best_test_upon_valid = trainer.fit(train_data, valid_data=valid_data, test_data=test_data, saved=save_model)
-        #########
-        hyper_ret.append((hyper_tuple, best_valid_result, best_test_upon_valid))
+            # trainer loading and initialization
+            trainer = get_trainer()(config, model,score_writer)
+            # debug
+            # model training
+            best_valid_score, best_valid_result, best_test_upon_valid = trainer.fit(train_data, valid_data=valid_data, test_data=test_data, saved=save_model)
+            #########
+            hyper_ret.append((hyper_tuple, best_valid_result, best_test_upon_valid))
 
-        # save best test
-        if best_test_upon_valid[val_metric] > best_test_value:
-            best_test_value = best_test_upon_valid[val_metric]
-            best_test_idx = idx
-        idx += 1
+            # save best test
+            if best_test_upon_valid[val_metric] > best_test_value:
+                best_test_value = best_test_upon_valid[val_metric]
+                best_test_idx = idx
+            idx += 1
 
-        logger.info('best valid result: {}'.format(dict2str(best_valid_result)))
-        logger.info('test result: {}'.format(dict2str(best_test_upon_valid)))
-        logger.info('████Current BEST████:\nParameters: {}={},\n'
-                    'Valid: {},\nTest: {}\n\n\n'.format(config['hyper_parameters'],
-            hyper_ret[best_test_idx][0], dict2str(hyper_ret[best_test_idx][1]), dict2str(hyper_ret[best_test_idx][2])))
+            logger.info('best valid result: {}'.format(dict2str(best_valid_result)))
+            logger.info('test result: {}'.format(dict2str(best_test_upon_valid)))
+            logger.info('████Current BEST████:\nParameters: {}={},\n'
+                        'Valid: {},\nTest: {}\n\n\n'.format(config['hyper_parameters'],
+                hyper_ret[best_test_idx][0], dict2str(hyper_ret[best_test_idx][1]), dict2str(hyper_ret[best_test_idx][2])))
 
     # log info
     logger.info('\n============All Over=====================')

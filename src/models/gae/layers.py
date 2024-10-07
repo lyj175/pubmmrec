@@ -22,8 +22,10 @@ class GraphConvolution(Module):
         torch.nn.init.xavier_uniform_(self.weight)#TODO 初始化可学习参数
 
     def forward(self, input, adj):
-        input = F.dropout(input, self.dropout, self.training)
-        support = torch.mm(input, self.weight)#TODO 原始样本特征乘上参数矩阵（可学习参数）
+        input = F.dropout(input, self.dropout, self.training).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        self.weight = torch.nn.Parameter(self.weight.to(torch.device("cuda" if torch.cuda.is_available() else "cpu")))
+        support = torch.mm(input, self.weight).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))#TODO 原始样本特征乘上参数矩阵（可学习参数）
+        adj = adj.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         output = torch.spmm(adj, support)#TODO 乘以邻接矩阵达到聚合的效果
         output = self.act(output)#TODO 经过激活函数，按照输出层大小进行输出
         return output

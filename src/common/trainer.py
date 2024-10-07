@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 from time import time
 from logging import getLogger
 
-from src.utils.utils import get_local_time, early_stopping, dict2str
-from src.utils.topk_evaluator import TopKEvaluator
+from utils.utils import get_local_time, early_stopping, dict2str
+from utils.topk_evaluator import TopKEvaluator
 
 
 class AbstractTrainer(object):
@@ -59,10 +59,11 @@ class Trainer(AbstractTrainer):
 
     """
 
-    def __init__(self, config, model):
+    def __init__(self, config, model,score_file):
         super(Trainer, self).__init__(config, model)
 
         self.logger = getLogger()
+        self.score_file = score_file
         self.learner = config['learner']
         self.learning_rate = config['learning_rate']
         self.epochs = config['epochs']
@@ -146,7 +147,8 @@ class Trainer(AbstractTrainer):
         for batch_idx, interaction in enumerate(train_data):#TODO 在trainData中按批次大小打包数据开始训练
             self.optimizer.zero_grad()
             print(batch_idx,'/',len(train_data))
-            losses = loss_func(interaction)
+            losses = loss_func(interaction)#TODO 其他模型时开启
+            # losses,a,b,c,d = loss_func(interaction)#TODO AGCL时开启 abcd分别是排序损失、正则损失、对比损失v、对比损失t
             if isinstance(losses, tuple):
                 loss = sum(losses)
                 loss_tuple = tuple(per_loss.item() for per_loss in losses)
@@ -157,7 +159,10 @@ class Trainer(AbstractTrainer):
             if self._check_nan(loss):
                 self.logger.info('Loss is nan at epoch: {}, batch index: {}. Exiting.'.format(epoch_idx, batch_idx))
                 return loss, torch.tensor(0.0)
+            start_time = time()
+            self.logger.info('start backward')
             loss.backward()
+            self.logger.info(f'end backward:{time()-start_time}')
             if self.clip_grad_norm:
                 clip_grad_norm_(self.model.parameters(), **self.clip_grad_norm)
             self.optimizer.step()
@@ -165,6 +170,7 @@ class Trainer(AbstractTrainer):
             # for test
             #if batch_idx == 0:
             #    break
+            # break #TODO 调试用，正常情况不能使用，否则异常
         return total_loss, loss_batches
 
     def _valid_epoch(self, valid_data):
@@ -254,13 +260,14 @@ class Trainer(AbstractTrainer):
                         self.logger.info(update_output)
                     self.best_valid_result = valid_result
                     self.best_test_upon_valid = test_result
-
+                self.score_file.writerow([valid_score, valid_result,test_result,self.best_valid_score, self.best_valid_result, self.best_test_upon_valid])
                 if stop_flag:
                     stop_output = '+++++Finished training, best eval result in epoch %d' % \
                                   (epoch_idx - self.cur_step * self.eval_step)
                     if verbose:
                         self.logger.info(stop_output)
                     break
+
         return self.best_valid_score, self.best_valid_result, self.best_test_upon_valid
 
 

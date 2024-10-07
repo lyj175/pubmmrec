@@ -42,8 +42,8 @@ def get_model(model_name):
 
 
 def get_trainer():
-    # return getattr(importlib.import_module('common.trainer'), 'Trainer')
-    return getattr(importlib.import_module('src.common.trainer'), 'Trainer')
+    return getattr(importlib.import_module('common.trainer'), 'Trainer')
+    # return getattr(importlib.import_module('src.common.trainer'), 'Trainer')
 
 
 def init_seed(seed):

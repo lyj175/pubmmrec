@@ -41,4 +41,5 @@ def metadata_split(split_num,features):
     return v_for_channel,all_of_index
 
 def join_tail(fea,len):
-    return torch.cat((fea, torch.zeros(len - fea.shape[0])), 0)
+    fea = fea.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    return torch.cat((fea, torch.zeros(len - fea.shape[0]).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))), 0)

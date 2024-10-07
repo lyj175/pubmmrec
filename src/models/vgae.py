@@ -8,9 +8,9 @@ import torch
 from scipy.sparse import coo_matrix
 from torch import nn, optim
 
-from src.models.gae.optimizer import loss_function
-from src.models.gae.utils import mask_test_edges, preprocess_graph, get_roc_score
-from src.models.gae.model import GCNModelVAE
+from models.gae.optimizer import loss_function
+from models.gae.utils import mask_test_edges, preprocess_graph, get_roc_score
+from models.gae.model import GCNModelVAE
 import scipy.sparse as sp
 
 

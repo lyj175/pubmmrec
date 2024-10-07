@@ -14,25 +14,29 @@ class ChannelAttention(nn.Module):
     self.sigmoid = nn.Sigmoid()
 
   def forward(self, x):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    x = x.to(device) 
+    self.to(device)
+    # avg_out = self.fc2(self.relu1(self.fc1(self.avg_pool(x))))
     avg_out = self.fc2(self.relu1(self.fc1(self.avg_pool(x))))
     max_out = self.fc2(self.relu1(self.fc1(self.max_pool(x))))
     out = avg_out + max_out
     return self.sigmoid(out)
 
 
-def example():
-    import torch
-    import torch.nn as nn
-    # Sample input tensor
-    x = torch.randn(1, 64, 50, 50)  # Batch size 1, 64 channels, 50x50 feature map
-    # (19000,10,1,60) shape
-
-    # Instantiate the ChannelAttention module
-    ca = ChannelAttention(in_planes=64)
-    # Apply channel attention to the input
-    output = ca(x)
-
-    # Print the output shape
-    print(output.shape)
-    print(output)
-example()
+# def example():
+#     import torch
+#     import torch.nn as nn
+#     # Sample input tensor
+#     x = torch.randn(1, 64, 50, 50)  # Batch size 1, 64 channels, 50x50 feature map
+#     # (19000,10,1,60) shape
+#
+#     # Instantiate the ChannelAttention module
+#     ca = ChannelAttention(in_planes=64)
+#     # Apply channel attention to the input
+#     output = ca(x)
+#
+#     # Print the output shape
+#     print(output.shape)
+#     print(output)
+# example()

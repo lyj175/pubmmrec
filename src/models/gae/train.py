@@ -12,9 +12,9 @@ from scipy.sparse import coo_matrix
 from torch import optim, nn
 from sklearn.decomposition import TruncatedSVD
 
-from src.models.gae.model import GCNModelVAE
-from src.models.gae.optimizer import loss_function
-from src.models.gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
+from models.gae.model import GCNModelVAE
+from models.gae.optimizer import loss_function
+from models.gae.utils import load_data, mask_test_edges, preprocess_graph, get_roc_score
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=str, default='gcn_vae', help="models used")

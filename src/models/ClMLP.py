@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from time import time
 from torch.utils.data import DataLoader
 
 from models.vgae import VGAE
@@ -58,9 +59,12 @@ class ClEncoder(nn.Module):
 
         self.vgae.set_fea(x_1)
         # TODO VGAE and Contrastive Learning 4 随机抽取子图并由VGAE生成对应增强子图
+        start = time()
+        print(f'start simulate subgraph')
         results,vgae_loss = self.vgae.simulate(90)
         # cl_loss = 0
         cl_loss = self.info_nce_loss(results)
+        print(f'end simulate subgraph{time() - start}')
         # self.optimizer.zero_grad()
         # cl_loss.backward(retain_graph=True) #TODO 即时
         # self.optimizer.step()

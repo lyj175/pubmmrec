@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from time import time
 from torch import optim
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.utils import remove_self_loops, degree
@@ -302,18 +303,24 @@ class DRAGON(GeneralRecommender):
                 #     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 # else:
                 #     representation += self.t_rep
-                #TODO channel fusion
+                #TODO channel fusion#TODO 耗时大户
+                start = time()
+                print('start fusion')
                 if self.rep_for_fusion == None or self.split_scale_index == None:
                     self.rep_for_fusion,self.split_scale_index = metadata_split(self.metadata_num,self.v_rep)
                 weight_fea = self.fusion_model(self.rep_for_fusion)
                 weight_fea = weight_fea.squeeze()
-                weight_fea = weight_fea.detach().cpu().numpy()
+                # weight_fea = weight_fea.detach().cpu().numpy()
+                # weight_fea = weight_fea.numpy()
+                weight_fea = weight_fea
                 for i in range(0,len(self.v_rep)):
-                    split_fea_for_m_v = np.array_split(self.v_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                    # split_fea_for_m_v = np.array_split(self.v_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                    split_fea_for_m_v = np.array_split(self.v_rep[i], self.split_scale_index[i])
                     m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
                     self.v_rep[i] = m_result_v
 
-                    split_fea_for_m_t = np.array_split(self.t_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                    # split_fea_for_m_t = np.array_split(self.t_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                    split_fea_for_m_t = np.array_split(self.t_rep[i], self.split_scale_index[i])
                     m_result_t = torch.cat(
                         [torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
                     self.t_rep[i] = m_result_t
@@ -321,7 +328,7 @@ class DRAGON(GeneralRecommender):
                     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 else:
                     representation += self.t_rep
-
+                print(f'end fusion:{time()-start}')
         # TODO 模态融合2：选择具体融合方式
         if self.construction == 'weighted_sum':
             if self.v_rep is not None:

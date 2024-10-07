@@ -10,6 +10,7 @@ class ChannelAttention(nn.Module):
     self.fc1 = nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False)
     self.relu1 = nn.ReLU()
     self.fc2 = nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False)
+    self.fc3 = nn.Conv2d(in_planes, 64, 1, bias=False)
 
     self.sigmoid = nn.Sigmoid()
 
@@ -21,7 +22,8 @@ class ChannelAttention(nn.Module):
     avg_out = self.fc2(self.relu1(self.fc1(self.avg_pool(x))))
     max_out = self.fc2(self.relu1(self.fc1(self.max_pool(x))))
     out = avg_out + max_out
-    return self.sigmoid(out)
+    result = self.fc3(out)
+    return self.sigmoid(result)
 
 
 # def example():

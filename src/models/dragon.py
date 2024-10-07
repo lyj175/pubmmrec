@@ -64,8 +64,10 @@ class DRAGON(GeneralRecommender):
         self.mm_adj = None
         self.metadata_num = 10
         self.fusion_model = ChannelAttention(self.metadata_num)
-        self.rep_for_fusion = None
-        self.split_scale_index = None
+        self.rep_for_fusion_v = None
+        self.split_scale_index_v = None
+        self.rep_for_fusion_t = None
+        self.split_scale_index_t = None
         # self.clEncoder = ClMLP.ClEncoder(dim_x,dim_x,dim_x,self.device)
 
 
@@ -309,20 +311,25 @@ class DRAGON(GeneralRecommender):
                 start = time()
                 print('---------start fusion')
                 #TODO channel fusion
-                if self.rep_for_fusion == None or self.split_scale_index == None:
-                    self.rep_for_fusion,self.split_scale_index = metadata_split(self.metadata_num,self.v_rep)
-                weight_fea = self.fusion_model(self.rep_for_fusion)
-                weight_fea = weight_fea.squeeze()
-                weight_fea = weight_fea.detach().cpu().numpy()
-                for i in range(0,len(self.v_rep)):
-                    split_fea_for_m_v = np.array_split(self.v_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
-                    m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
-                    self.v_rep[i] = m_result_v
-
-                    split_fea_for_m_t = np.array_split(self.t_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
-                    m_result_t = torch.cat(
-                        [torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
-                    self.t_rep[i] = m_result_t
+                if self.rep_for_fusion_v == None or self.split_scale_index_v == None:
+                    self.rep_for_fusion_v,self.split_scale_index_v = metadata_split(self.metadata_num,self.v_rep)
+                    self.rep_for_fusion_t,self.split_scale_index_t = metadata_split(self.metadata_num,self.t_rep)
+                weight_fea_v = self.fusion_model(self.rep_for_fusion_v)
+                weight_fea_v = weight_fea_v.squeeze()
+                weight_fea_t = self.fusion_model(self.rep_for_fusion_t)
+                weight_fea_t = weight_fea_t.squeeze()
+                self.v_rep = self.v_rep * weight_fea_v
+                self.t_rep = self.t_rep * weight_fea_t
+                # weight_fea_v = weight_fea_v.detach().cpu().numpy()
+                # for i in range(0,len(self.v_rep)):
+                #     split_fea_for_m_v = np.array_split(self.v_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                #     m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
+                #     self.v_rep[i] = m_result_v
+                #
+                #     split_fea_for_m_t = np.array_split(self.t_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
+                #     m_result_t = torch.cat(
+                #         [torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
+                #     self.t_rep[i] = m_result_t
                 if self.construction == 'cat':
                     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
                 else:

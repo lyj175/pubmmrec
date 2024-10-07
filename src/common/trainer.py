@@ -222,6 +222,7 @@ class Trainer(AbstractTrainer):
             train_loss, _ = self._train_epoch(train_data, epoch_idx)
             if torch.is_tensor(train_loss):
                 # get nan loss
+                print(f'--------nan-------{train_loss}')
                 break
             #for param_group in self.optimizer.param_groups:
             #    print('======lr: ', param_group['lr'])

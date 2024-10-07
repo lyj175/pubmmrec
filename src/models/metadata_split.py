@@ -11,8 +11,7 @@ def metadata_split(split_num,features):
     s = np.square(s)
     sum_of_values = np.sum(s)
     for i in range(0, len(s)-1):
-        s[i] = s[i] / sum_of_values
-    s = s*len(features[0])
+        s[i] = int(s[i] / sum_of_values * len(features[0]))
     meta_data_len = int(np.max(s))
 
     # temp_fea = features.clone().detach()

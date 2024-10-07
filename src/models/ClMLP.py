@@ -58,7 +58,7 @@ class ClEncoder(nn.Module):
 
         self.vgae.set_fea(x_1)
         # TODO VGAE and Contrastive Learning 4 随机抽取子图并由VGAE生成对应增强子图
-        results,vgae_loss = self.vgae.simulate(40)
+        results,vgae_loss = self.vgae.simulate(100)
         # cl_loss = 0
         cl_loss = self.info_nce_loss(results)
         # self.optimizer.zero_grad()

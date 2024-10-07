@@ -316,13 +316,14 @@ class DRAGON(GeneralRecommender):
                 for i in range(0,len(self.v_rep)):
                     # split_fea_for_m_v = np.array_split(self.v_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
                     split_fea_for_m_v = np.array_split(self.v_rep[i], self.split_scale_index[i])
-                    m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
+                    # m_result_v = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
+                    m_result_v = torch.cat([torch.mul(x, y) for x, y in zip(split_fea_for_m_v, weight_fea[i])],0)
                     self.v_rep[i] = m_result_v
 
                     # split_fea_for_m_t = np.array_split(self.t_rep[i].detach().cpu().numpy(), self.split_scale_index[i])
                     split_fea_for_m_t = np.array_split(self.t_rep[i], self.split_scale_index[i])
-                    m_result_t = torch.cat(
-                        [torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
+                    # m_result_t = torch.cat([torch.from_numpy(np.multiply(x, y)) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
+                    m_result_t = torch.cat([torch.mul(x, y) for x, y in zip(split_fea_for_m_t, weight_fea[i])], 0)
                     self.t_rep[i] = m_result_t
                 if self.construction == 'cat':
                     representation = torch.cat((self.v_rep, self.t_rep), dim=1)
